@@ -77,6 +77,8 @@ int main() {
   thread t1(producer);
   thread t2(consumer);
 
+  thread t3(producer);
+
   this_thread::sleep_for(chrono::seconds(5));
 
   // 쓰레드들을 종료시키도록 flag 를 켠다.
@@ -96,6 +98,10 @@ int main() {
   // 여기서는 쓰레드가 만들어진 경우만 join() 을 호출하기 위해서 사용한다.
   if (t2.joinable()) {
     t2.join();
+  }
+
+  if (t3.joinable()) {
+    t3.join();
   }
 
   cout << "Main thread finished" << endl;
