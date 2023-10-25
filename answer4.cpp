@@ -33,7 +33,7 @@ void producer() {
     int job = rand() % 100;
     {
       unique_lock<mutex> ul(queMutex);
-      while (que[0] == NO_JOB) {
+      while (que[0] != NO_JOB) {
         queFillable.wait(ul);
       }
       que[0] = job;
