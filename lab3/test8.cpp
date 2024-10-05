@@ -24,18 +24,18 @@ int main(){
     } 
 
     while(true){
-        char buf2[65536];
+        char buf[65536];
         struct sockaddr_in cli_sin;
-        __socklen_t sin_size = sizeof(cli_sin);\
+        __socklen_t sin_size = sizeof(cli_sin);
 
-        ssize_t recv_bytes=recvfrom(s,buf2,sizeof(buf2),0,(struct sockaddr *) &cli_sin, &sin_size);
+        ssize_t recv_bytes=recvfrom(s,buf,sizeof(buf),0,(struct sockaddr *) &cli_sin, &sin_size);
         if(recv_bytes==-1){ //정보 받기
             cerr<<strerror(errno)<<endl;
             return 0;
         }
-        buf2[recv_bytes] = '\0';
-        
-        if(sendto(s,buf2,recv_bytes,0,(struct sockaddr *) &cli_sin,sin_size)==-1){
+        buf[recv_bytes] = '\0';
+
+        if(sendto(s,buf,recv_bytes,0,(struct sockaddr *) &cli_sin,sin_size)==-1){ //정보 보내기
             cerr<<strerror(errno)<<endl;
             return 0;
         }
