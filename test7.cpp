@@ -4,6 +4,8 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <chrono>
+#include <queue>
 
 using namespace std;
 
@@ -19,10 +21,8 @@ atomic<bool> quit(false);
 // condition_variable 은 mutex 가 반드시 필요하다.
 // 그런데 여러개의 condition_variable 이 mutex 하나를 쓰는 지금 상황에 주목할 것.
 mutex queMutex;
-condition_variable queFillable;
 condition_variable queFilled;
-int que[1] = { NO_JOB };
-
+queue<int> que;
 
 // producer thread 의 thread 함수
 void producer() {
@@ -31,9 +31,14 @@ void producer() {
   // thread 종료 flag 가 켜질 때가지 동작 시킨다.
   while (quit.load() == false) {
     int job = rand() % 100;
-    if (que[0] == NO_JOB) {
-      que[0] = job;
+
+    {
+        unique_lock<mutex> ul(queMutex);
+        que.push(job);
+        queFilled.notify_one();
+        cout<<"Produced: "<<job<<endl;
     }
+
   }
   cout << "Producer finished" << endl;
 }
@@ -46,41 +51,56 @@ void consumer() {
   // thread 종료 flag 가 켜질 때까지 동작 시킨다.
   while (quit.load() == false) {
     int job;
-    job = que[0];
-    que[0] = NO_JOB;
+
+    {
+        unique_lock<mutex> ul(queMutex);
+        while(que.empty()){
+            queFilled.wait(ul);
+        }
+        job = que.front();
+        que.pop();
+        cout<<"Consumed: "<<job<< endl;
+    }
+    
   }
   cout << "Consumer finshed" << endl;
 }
 
 
 int main() {
-  cout << "Main thread started. Thread id: " << this_thread::get_id() << endl;
+cout << "Main thread started. Thread id: " << this_thread::get_id() << endl;
 
   // 랜덤 생성기의 초기값을 지정한다.
-  srand(time(NULL));
+srand(time(NULL));
 
   // producer/consumer 쓰레드의 핸들을 저장할 C++ 측 객체
-  thread t1;
-  thread t2;
+thread t1(producer);
+thread t2(consumer);
+thread t3(producer);
+
+this_thread::sleep_for(chrono::seconds(5));
 
   // 쓰레드들을 종료시키도록 flag 를 켠다.
-  quit.store(true);
+quit.store(true);
 
   // thread.joinable() 은 C++ 측 thread 객체에 대응되는 OS 측 thread 가 있는지를 확인하는 것이다.
   // OS 측 thread 가 만들어지지 않았거나, 이미 thread 가 join 되었거나,
   // 아니면 우리가 다루지는 않았지만, OS thread 가 detach 된 경우 joinable() 은 false 를 반환한다.
   // 여기서는 쓰레드가 만들어진 경우만 join() 을 호출하기 위해서 사용한다.
-  if (t1.joinable()) {
+if (t1.joinable()) {
     t1.join();
-  }
+}
 
   // thread.joinable() 은 C++ 측 thread 객체에 대응되는 OS 측 thread 가 있는지를 확인하는 것이다.
   // OS 측 thread 가 만들어지지 않았거나, 이미 thread 가 join 되었거나,
   // 아니면 우리가 다루지는 않았지만, OS thread 가 detach 된 경우 joinable() 은 false 를 반환한다.
   // 여기서는 쓰레드가 만들어진 경우만 join() 을 호출하기 위해서 사용한다.
-  if (t2.joinable()) {
+if (t2.joinable()) {
     t2.join();
-  }
+}
 
-  cout << "Main thread finished" << endl;
+if (t3.joinable()) {
+    t3.join();
+}
+cout << "Main thread finished" << endl;
 }

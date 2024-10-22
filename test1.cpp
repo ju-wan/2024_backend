@@ -60,8 +60,8 @@ int main() {
   srand(time(NULL));
 
   // producer/consumer 쓰레드의 핸들을 저장할 C++ 측 객체
-  thread t1;
-  thread t2;
+  thread t1(producer);
+  thread t2(consumer);
 
   // 쓰레드들을 종료시키도록 flag 를 켠다.
   quit.store(true);

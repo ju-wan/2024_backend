@@ -1,3 +1,4 @@
+//실수로 5번 과제에 덮어써버려서 answer4.cpp 복사 붙혀넣기 하겠습니다!! 죄송합니다!!   
 #include <atomic>
 #include <condition_variable>
 #include <cstdlib>
@@ -31,7 +32,11 @@ void producer() {
   // thread 종료 flag 가 켜질 때가지 동작 시킨다.
   while (quit.load() == false) {
     int job = rand() % 100;
-    if (que[0] == NO_JOB) {
+    {
+      unique_lock<mutex> ul(queMutex);
+      while (que[0] != NO_JOB) {
+        queFillable.wait(ul);
+      }
       que[0] = job;
     }
   }
@@ -46,8 +51,13 @@ void consumer() {
   // thread 종료 flag 가 켜질 때까지 동작 시킨다.
   while (quit.load() == false) {
     int job;
-    job = que[0];
-    que[0] = NO_JOB;
+    {
+      unique_lock<mutex> ul(queMutex);
+      job = que[0];
+      que[0] = NO_JOB;
+      queFillable.notify_one();
+      cout << "Consumed: " << job << endl;
+    }
   }
   cout << "Consumer finshed" << endl;
 }
@@ -60,8 +70,10 @@ int main() {
   srand(time(NULL));
 
   // producer/consumer 쓰레드의 핸들을 저장할 C++ 측 객체
-  thread t1;
-  thread t2;
+  thread t1(producer);
+  thread t2(consumer);
+
+  this_thread::sleep_for(chrono::seconds(5));
 
   // 쓰레드들을 종료시키도록 flag 를 켠다.
   quit.store(true);
