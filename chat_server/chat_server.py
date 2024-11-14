@@ -454,7 +454,7 @@ def main(argv):
     client_handlers = {}
 
     #can fix worker
-    init_worker(2)
+    init_worker(100)
 
     try:
         # can connect with many clients by using select
