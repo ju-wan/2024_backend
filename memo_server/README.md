@@ -5,6 +5,10 @@ flask --app memo run --port 10218 --host 0.0.0.0
 
 를 사용하시면 됩니다.
 
+http://mjubackend.duckdns.org:10218
+
+으로 접속하시면 됩니다.
+
 현제 상태는 docker가 꺼져있습니다.
 
 해당 command를 사용하여 docker을 run하시면 됩니다.
@@ -22,3 +26,8 @@ docker run --name mysql-jawan \
     -d mysql:latest
 
 -v $(pwd)/my.cnf:/etc/mysql/my.cnf \ 는 opensql 환경에서도 한글이 깨지지 않기 위한 설정파일입니다.
+
+mysql 정보를 확인히시기 위하여
+sudo docker exec -it mysql-jawan mysql -u root -p
+USE memo_db;
+로 확인하시면 되고, 비밀번호는 root 입니다.

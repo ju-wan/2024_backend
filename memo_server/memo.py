@@ -10,9 +10,6 @@ from flask import abort, Flask, make_response, render_template, Response, redire
 
 app = Flask(__name__)
 
-#user_cookie 저장 dict
-user_id_map = {}
-
 naver_client_id = 'avXTBBSOccfdTzVTmLkb'
 naver_client_secret = 'Zq4FSP1Od8'
 naver_redirect_uri = 'http://mjubackend.duckdns.org:10218/auth'
@@ -35,23 +32,22 @@ def home():
     # 이 부분이 동작하기 위해서는 OAuth 에서 access token 을 얻어낸 뒤
     # user profile REST api 를 통해 유저 정보를 얻어낸 뒤 'userId' 라는 cookie 를 지정해야 된다.
     # (참고: 아래 onOAuthAuthorizationCodeRedirected() 마지막 부분 response.set_cookie('userId', user_id) 참고)
-    userId = request.cookies.get('userId', default=None)
+    decryption_id  = request.cookies.get('userId', default=None)
     name = None
 
     ####################################################
     # TODO: 아래 부분을 채워 넣으시오.
     #       userId 로부터 DB 에서 사용자 이름을 얻어오는 코드를 여기에 작성해야 함
     #로그인 쿠키가 있는 경우
-    if userId in user_id_map:
+    if decryption_id :
         #db 연결 및 수정 부분 코드는 chat-gpt의 도움을 받아 작성하였습니다. 
-        decryption_id=user_id_map[userId]
         db_connect=MySQLdb_connect()
         db_cursor=db_connect.cursor()
-        
-        db_cursor.execute('SELECT name FROM users WHERE id = %s', (decryption_id,))
+        db_cursor.execute('SELECT name FROM users WHERE session_id = %s', (decryption_id,))
         result = db_cursor.fetchone()
         if result:
             name = result[0]
+        print(name)
         db_connect.commit()
         db_connect.close()
     ####################################################
@@ -121,14 +117,20 @@ def onOAuthAuthorizationCodeRedirected():
 
     print(user_name + "이 로그인하였습니다.")
 
+     #암호화 진행
+    key = secrets.token_hex(16)
+
     #db 연결 및 수정 부분 코드는 chat-gpt의 도움을 받아 작성하였습니다. 
     db_connect=MySQLdb_connect()
     db_cursor=db_connect.cursor()
     #데이터를 넣고, 두번째 줄은 기본 키 업데이트 관련 정보 -> sql문 공부 필요
-    db_cursor.execute('''
-        INSERT INTO users (id, name) VALUES (%s, %s) 
-        ON DUPLICATE KEY UPDATE name = VALUES(name)
-    ''', (user_id, user_name)) #이상하게 한글이 깨짐 -> name : ???로 나옵니다... -> cnf 파일 추가로 해결
+    db_cursor.execute(
+            '''
+            INSERT INTO users (id, name, session_id) VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE name = VALUES(name), session_id = VALUES(session_id)
+            ''',
+            (user_id, user_name, key)
+    ) #이상하게 한글이 깨짐 -> name : ???로 나옵니다... -> cnf 파일 추가로 해결
     db_connect.commit()
     db_connect.close()
 
@@ -140,11 +142,6 @@ def onOAuthAuthorizationCodeRedirected():
     #          key = random string 으로 얻어낸 a1f22bc347ba3 이런 문자열
     #          user_id_map[key] = real_user_id
     #          user_id = key
-
-    #암호화 진행
-    key = secrets.token_hex(16)
-    user_id_map[key]=user_id
-
     response = redirect('/')
     response.set_cookie('userId', key)
     return response
@@ -152,57 +149,76 @@ def onOAuthAuthorizationCodeRedirected():
 
 @app.route('/memo', methods=['GET'])
 def get_memos():
-    # 로그인이 안되어 있다면 로그인 하도록 첫 페이지로 redirect 해준다.
-    userId = request.cookies.get('userId', default=None)
-    if not userId:
+    # 로그인이 안되어 있다면 첫 페이지로 redirect
+    session_id = request.cookies.get('userId', default=None)
+    if not session_id:
+        print("User not logged in.")
         return redirect('/')
 
     result = []
 
-    # Decrypt userId
-    if userId in user_id_map:
-        decryption_id = user_id_map[userId]
-
-        # DB 연결 및 메모 데이터 가져오기
+    try:
         db_connect = MySQLdb_connect()
         db_cursor = db_connect.cursor()
 
-        # 해당 유저의 메모 가져오기
-        db_cursor.execute('SELECT memo FROM memos WHERE user_id = %s', (decryption_id,))
+        # session_id로 user_id 확인
+        db_cursor.execute('SELECT id FROM users WHERE session_id = %s', (session_id,))
+        user_result = db_cursor.fetchone()
+
+        if not user_result:
+            print("Invalid session ID.")
+            abort(HTTPStatus.UNAUTHORIZED)
+
+        user_id = user_result[0]
+
+        # 메모 가져오기
+        db_cursor.execute('SELECT id, memo FROM memos WHERE user_id = %s', (user_id,))
         all_memo = db_cursor.fetchall()
 
-        # 메모 데이터를 result에 추가
-        result.extend([{"text": memo[0]} for memo in all_memo])
+        # 결과 변환
+        result.extend([{"id": memo[0], "text": memo[1]} for memo in all_memo])
 
+    except mysql.connector.Error as err:
+        print(f"MySQL Error: {err}")
+        abort(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    finally:
         db_cursor.close()
         db_connect.close()
 
-    # JSON 형식으로 메모 데이터 반환
-    return {'memos': result}
+    return {"memos": result}
 
 @app.route('/memo', methods=['POST'])
 def post_new_memo():
     # 로그인이 안되어 있다면 로그인 하도록 첫 페이지로 redirect 해준다.
-    userId = request.cookies.get('userId', default=None)
-    if not userId:
+    decryption_id = request.cookies.get('userId', default=None)
+    print("in")
+    if not decryption_id:
         return redirect('/')
 
     # 클라이언트로부터 JSON 을 받았어야 한다.
     if not request.is_json:
+        print("not json")
         abort(HTTPStatus.BAD_REQUEST)
 
+    print("json")
     # TODO: 클라이언트로부터 받은 JSON 에서 메모 내용을 추출한 후 DB에 userId 의 메모로 추가한다.
     request_data=request.get_json()
     request_memo=request_data.get('text', None)
 
     print(request_memo + "과 같은 내용을 저장하겠습니다.")
 
-    decryption_id=user_id_map[userId]
     db_connect=MySQLdb_connect()
     db_cursor=db_connect.cursor()
 
+    # session_id로 user_id 확인
+    db_cursor.execute('SELECT id FROM users WHERE session_id = %s', (decryption_id,))
+    user_result = db_cursor.fetchone()
+
+    user_id = user_result[0]
+
     # SQL문은 gpt의 도움을 받았습니다
-    db_cursor.execute('INSERT INTO memos (user_id, memo) VALUES (%s, %s)', (decryption_id, request_memo))
+    db_cursor.execute('INSERT INTO memos (user_id, memo) VALUES (%s, %s)', (user_id, request_memo))
     db_connect.commit()
 
     db_cursor.close()
