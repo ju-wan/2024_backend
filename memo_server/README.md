@@ -1,4 +1,4 @@
-실습 서버 버전 memo_server 구현
+실습 서버 버전 memo_server 구현 ------------------------------------------------------------------------
 해당 위치에서 
 
 flask --app memo run --port 10218 --host 0.0.0.0
@@ -31,3 +31,15 @@ mysql 정보를 확인히시기 위하여
 sudo docker exec -it mysql-jawan mysql -u root -p
 USE memo_db;
 로 확인하시면 되고, 비밀번호는 root 입니다.
+
+aws 버전 memo_server 구현 ------------------------------------------------------------------------
+자세한 정보는 해당 경로에 보고서를 참고 부탁드립니다.
+
+사용한 docker은 실습 서버의 docker와 같고, 비밀번호는 root 입니다.
+부여된 dns는
+
+http://melba-1292013705.ap-northeast-2.elb.amazonaws.com/memo
+
+와 같습니다. 이를 통하여 접속해 주시면 감사드리겠습니다.
+
+
